@@ -7,6 +7,7 @@ import wallet.core.jni.StoredKey
 import wallet.core.jni.CoinType
 import wallet.core.jni.StoredKeyEncryption
 import java.io.File
+import java.util.UUID
 
 class TestKeyStore {
 
@@ -121,6 +122,30 @@ class TestKeyStore {
     }
 
     @Test
+    fun testStoreWithTemporaryFile() {
+        val password = "password".toByteArray()
+        val keyStore = StoredKey("Test Wallet", password)
+
+        // Use UUID-generated names in the system temp directory — no file is
+        // created upfront, avoiding the TOCTOU race of create-then-delete.
+        // Both paths share the same directory so rename(2) is atomic.
+        val tmpDir = File(System.getProperty("java.io.tmpdir")!!)
+        val destFile = File(tmpDir, UUID.randomUUID().toString() + ".json")
+        val tempFile = File(tmpDir, UUID.randomUUID().toString() + ".json.tmp")
+
+        try {
+            assertTrue(keyStore.storeWithTemporaryFile(destFile.absolutePath, tempFile.absolutePath))
+            assertTrue(destFile.exists())
+            assertFalse(tempFile.exists()) // rename consumed the temp file
+
+            val loaded = StoredKey.load(destFile.absolutePath)
+            assertNotNull(loaded)
+        } finally {
+            destFile.delete()
+            tempFile.delete()
+        }
+    }
+
     fun testFixScryptWithEmptySalt() {
         val gMnemonic = "team engine square letter hero song dizzy scrub tornado fabric divert saddle"
         val password = "password".toByteArray()
